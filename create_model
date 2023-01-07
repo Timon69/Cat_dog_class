@@ -1,0 +1,132 @@
+"This code for google coloboratory"
+
+from tensorflow import keras
+from tensorflow.keras.layers import Dense, Flatten, Dropout, Conv2D, MaxPooling2D
+import numpy as np
+from google.colab import files
+import matplotlib.pyplot as plt
+import os
+import cv2
+
+size_photo = 40
+
+
+def find_photo(dir):
+    for root, dirs, files in os.walk(dir):
+        photos = files
+        return [root + "/" + i for i in files]
+        
+        
+def photo_processing(path):
+  img = cv2.imread(path)
+  gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+  resize_img = cv2.resize(gray_img, (size_photo, size_photo))
+  bitwise_img = cv2.bitwise_not(resize_img)
+  bin_img = np.around(np.divide(bitwise_img, 255.0), decimals=1)
+  return bin_img
+  
+  
+# uploading pictures of cats
+upl = files.upload()
+
+# list of cats file path
+photo_cats = find_photo("/content")
+
+# creating an array of values   
+cats_x = np.asarray([photo_processing(photo) for photo in photo_cats])
+cats_y = [0 for i in range(len(cats_x))]
+
+
+# cleaning cat files
+def delete_img(dir="/content"):
+  for file in photo_cats:
+    try:
+      os.remove(file)
+    except:
+      continue
+
+delete_img()
+
+
+# uploading pictures of dogs
+upl = files.upload()
+
+# list of dogs file path
+photo_dogs = find_photo("/content")
+
+# creating an array of values    
+dogs_x = np.asarray([photo_processing(photo) for photo in photo_dogs])
+dogs_y = [1 for i in range(len(dogs_x))]
+
+
+# cleaning dog files
+def delete_img(dir="/content"):
+  for file in photo_dogs:
+    try:
+      os.remove(file)
+    except Exception as e:
+      print(e)
+
+delete_img()
+
+
+x_train = np.vstack([dogs_x, cats_x])
+y_train = np.hstack([dogs_y, cats_y])
+
+x_train = np.expand_dims(x_train, axis=3)
+y_train_cat = keras.utils.to_categorical(y_train, 2)
+
+print(x_train.shape)
+print(y_train.shape)
+print(y_train_cat.shape)
+
+
+model = keras.Sequential([
+    Conv2D(32, (3,3), padding='same', activation='relu', input_shape=(size_photo, size_photo, 1)),
+    MaxPooling2D((2, 2), strides=2),
+    Conv2D(64, (3,3), padding='same', activation='relu'),
+    MaxPooling2D((2, 2), strides=2),
+    Conv2D(128, (3,3), padding='same', activation='relu'),
+    MaxPooling2D((2, 2), strides=2),
+    Flatten(),
+    Dense(50, activation='relu'),
+    Dense(2,  activation='softmax')
+])
+
+print(model.summary())
+
+
+model.compile(optimizer='adam',
+             loss='categorical_crossentropy',
+             metrics=['accuracy'])
+
+his = model.fit(x_train, y_train_cat, batch_size=5, epochs=5, validation_split=0.1)
+plt.plot(his.history["loss"])
+plt.plot(his.history["val_loss"])
+plt.show()
+
+
+model.save("model")
+
+
+def show_predict(path):
+  plt.figure(figsize=(1, 2))
+  img = photo_processing(path)
+  color = cv2.imread(path)
+  rgb = cv2.cvtColor(color, cv2.COLOR_BGR2RGB)
+  img = np.expand_dims(img, axis=0)
+
+  predict = model.predict(img)
+  print(predict)
+  if predict[0][0] > predict[0][1]:
+    print("It's a cat")
+else:
+    print("It's a dog")
+
+  fig, axs = plt.subplots(1, 2)
+  axs[0].imshow(rgb)
+  axs[1].imshow(img[0], cmap=plt.cm.binary)
+  plt.show()
+
+
+show_predict("your path to img")
