@@ -1,4 +1,14 @@
-"This code for google coloboratory"
+"Код для google colab, при желании можно немного изменить и использовать в"
+
+
+# В НАСТРОЙКАХ ПРОФИЛЯ НА САЙТЕ KAGGLE СОЗДАЙТЕ ТОКЕН API И ЗАГРУЗИТЕ JSON ФАЙЛ В БЛОКНОТ
+! pip install kaggle
+! mkdir ~/.kaggle
+! cp kaggle.json ~/.kaggle/
+! chmod 600 ~/.kaggle/kaggle.json
+! kaggle datasets download -d shaunthesheep/microsoft-catsvsdogs-dataset
+! unzip microsoft-catsvsdogs-dataset.zip
+
 
 from tensorflow import keras
 from tensorflow.keras.layers import Dense, Flatten, Dropout, Conv2D, MaxPooling2D
@@ -17,116 +27,121 @@ def find_photo(dir):
         return [root + "/" + i for i in files]
         
         
+# ОБРАБОТКА ФОТО  
 def photo_processing(path):
-  img = cv2.imread(path)
-  gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-  resize_img = cv2.resize(gray_img, (size_photo, size_photo))
-  bitwise_img = cv2.bitwise_not(resize_img)
-  bin_img = np.around(np.divide(bitwise_img, 255.0), decimals=1)
-  return bin_img
+  try:
+    img = cv2.imread(path)
+    gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    resize_img = cv2.resize(gray_img, (size_photo, size_photo))
+    bitwise_img = cv2.bitwise_not(resize_img)
+    mono_img = np.around(np.divide(bitwise_img, 255.0), decimals=1)
+    return mono_img
+  except: 
+    print(path)
+    os.remove(path)    # УДАЛЕНИЕ НЕИСПРАВНЫХ ФОТО
   
   
-# uploading pictures of cats
-upl = files.upload()
+# СПИСОК ПУТЕЙ ФАЙЛОВ КОТОВ
+name_files_cat = find_photo("/content/PetImages/Cat")
 
-# list of cats file path
-photo_cats = find_photo("/content")
+# КОЛИЧЕСТВО ФАЙЛОВ В ТРЕНИРОВОЧНОЙ ВЫБОРКЕ
+cat_train_count = int(len(name_files_cat) * train_size)
 
-# creating an array of values   
-cats_x = np.asarray([photo_processing(photo) for photo in photo_cats])
-cats_y = [0 for i in range(len(cats_x))]
+# МАССИВЫ ФОТОК КОТОВ ДЛЯ ТРЕНИРОВОЧНОЙ ВЫБОРКИ, ТЕСТОВОЙ, И МЕТКИ ДЛЯ НИХ
+train_catx = np.asarray([photo_processing(photo) for photo in name_files_cat[:cat_train_count]])
+train_caty = [0 for i in range(len(train_catx))]
 
+test_catx = np.asarray([photo_processing(photo) for photo in name_files_cat[cat_train_count:]])
+test_caty = [0 for i in range(len(test_catx))]
 
-# cleaning cat files
-def delete_img(dir="/content"):
-  for file in photo_cats:
-    try:
-      os.remove(file)
-    except:
-      continue
+print(f"Общее количество фото: {len(name_files_cat)}")
+print(f"Форма тренировочного тензора с массивами изображений: {train_catx.shape}")
+print(f"Форма тестового тензора с массивами изображений: {test_catx.shape}")
 
-delete_img()
+# ПОСЛЕ УДАЛЕНИЯ НЕИСПРАВНЫХ ФОТО ЗАПУСТИТЕ ЭТОТ БЛОК ЕЩЁ РАЗ, ИНАЧЕ ФОРМА ТЕНЗОРА БУДЕТ НЕВЕРНОЙ  
 
 
-# uploading pictures of dogs
-upl = files.upload()
+# СПИСОК ПУТЕЙ ФАЙЛОВ СОБАК
+name_files_dog = find_photo("/content/PetImages/Dog")
 
-# list of dogs file path
-photo_dogs = find_photo("/content")
+# КОЛИЧЕСТВО ФАЙЛОВ В ТРЕНИРОВОЧНОЙ ВЫБОРКЕ
+dog_train_count = int(len(name_files_dog) * train_size)
 
-# creating an array of values    
-dogs_x = np.asarray([photo_processing(photo) for photo in photo_dogs])
-dogs_y = [1 for i in range(len(dogs_x))]
+# МАССИВЫ ФОТОК КОТОВ ДЛЯ ТРЕНИРОВОЧНОЙ ВЫБОРКИ, ТЕСТОВОЙ, И МЕТКИ ДЛЯ НИХ
+train_dogx = np.asarray([photo_processing(photo) for photo in name_files_dog[:dog_train_count]])
+train_dogy = [1 for i in range(len(train_dogx))]
 
+test_dogx = np.asarray([photo_processing(photo) for photo in name_files_dog[dog_train_count:]])
+test_dogy = [1 for i in range(len(test_dogx))]
 
-# cleaning dog files
-def delete_img(dir="/content"):
-  for file in photo_dogs:
-    try:
-      os.remove(file)
-    except Exception as e:
-      print(e)
+print(f"Общее количество фото: {len(name_files_dog)}")
+print(f"Форма тренировочного тензора с массивами изображений: {train_dogx.shape}")
+print(f"Форма тестового тензора с массивами изображений: {test_dogx.shape}")
 
-delete_img()
+# ПОСЛЕ УДАЛЕНИЯ НЕИСПРАВНЫХ ФОТО ЗАПУСТИТЕ ЭТОТ БЛОК ЕЩЁ РАЗ, ИНАЧЕ ФОРМА ТЕНЗОРА БУДЕТ НЕВЕРНОЙ
 
 
-x_train = np.vstack([dogs_x, cats_x])
-y_train = np.hstack([dogs_y, cats_y])
+x_train = np.expand_dims(np.vstack([train_catx, train_dogx]), axis=3)    # ДОБАВЛЕНИЕ ОСИ К ТЕНЗОРУ
+y_train = keras.utils.to_categorical(np.hstack([train_caty, train_dogy]), num_classes=2)    # РАЗБИЕНИЕ МЕТОК НА 2 КЛАССА
+train_data = tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size).shuffle(buffer_size=19956)
 
-x_train = np.expand_dims(x_train, axis=3)
-y_train_cat = keras.utils.to_categorical(y_train, 2)
-
-print(x_train.shape)
-print(y_train.shape)
-print(y_train_cat.shape)
+print(f"Форма тренировочного тензора, полученного путём объединения тензоров с массивами котов и собак: {x_train.shape}")
+print(f"Тренировочный датасет: {train_data}")
 
 
+x_test = np.expand_dims(np.vstack([test_catx, test_dogx]), axis=3)
+y_test = keras.utils.to_categorical(np.hstack([test_caty, test_dogy]), num_classes=2)
+test_data = tf.data.Dataset.from_tensor_slices((x_test, y_test)).batch(batch_size).shuffle(buffer_size=19956)
+
+print(f"Форма тестового тензора, полученного путём объединения тензоров с массивами котов и собак: {x_test.shape}")
+print(f"Тестовый датасет: {test_data}")
+
+
+# СОЗДАНИЕ МОДЕЛИ
 model = keras.Sequential([
-    Conv2D(32, (3,3), padding='same', activation='relu', input_shape=(size_photo, size_photo, 1)),
+    Conv2D(32, (3,3), padding="same", activation="relu", input_shape=(size_photo, size_photo, 1)),
     MaxPooling2D((2, 2), strides=2),
-    Conv2D(64, (3,3), padding='same', activation='relu'),
+    Conv2D(64, (3,3), padding="same", activation="relu"),
     MaxPooling2D((2, 2), strides=2),
-    Conv2D(128, (3,3), padding='same', activation='relu'),
-    MaxPooling2D((2, 2), strides=2),
+    Conv2D(128, (3,3), padding="same", activation="relu"),
     Flatten(),
-    Dense(50, activation='relu'),
-    Dense(2,  activation='softmax')
+    Dense(150, activation="relu"),
+    Dense(2,  activation="softmax")
 ])
 
+# ВЫВОД СТРУКТУРЫ НЕЙРОСЕТИ
 print(model.summary())
 
 
-model.compile(optimizer='adam',
-             loss='categorical_crossentropy',
-             metrics=['accuracy'])
+# КОМПИЛЯЦИЯ НЕЙРОСЕТИ
+model.compile(optimizer="adam",
+             loss=keras.losses.CategoricalCrossentropy(),
+             metrics=["accuracy"])
 
-his = model.fit(x_train, y_train_cat, batch_size=5, epochs=5, validation_split=0.1)
-plt.plot(his.history["loss"])
-plt.plot(his.history["val_loss"])
-plt.show()
+# ОБУЧЕНИЕ НЕЙРОСЕТИ
+his = model.fit(train_data, epochs=1, validation_data=test_data)
+
+# ОЦЕНКА МОДЕЛИ
+model.evaluate(test_data)
 
 
-model.save("model")
-
-
+# ПОДАЧА НЕЙРОСЕТИ ПОЛЬЗОВАТЕЛЬСКОГО ИЗОБРАЖЕНИЯ
 def show_predict(path):
   plt.figure(figsize=(1, 2))
   img = photo_processing(path)
-  color = cv2.imread(path)
-  rgb = cv2.cvtColor(color, cv2.COLOR_BGR2RGB)
   img = np.expand_dims(img, axis=0)
+  rgb = cv2.imread(path)[:,:,::-1]
 
   predict = model.predict(img)
   print(predict)
   if predict[0][0] > predict[0][1]:
-    print("It's a cat")
-else:
-    print("It's a dog")
+   print("It's a cat")
+  else:
+   print("It's a dog")
 
   fig, axs = plt.subplots(1, 2)
   axs[0].imshow(rgb)
   axs[1].imshow(img[0], cmap=plt.cm.binary)
   plt.show()
 
-
-show_predict("your path to img")
+show_predict("your path to image")
